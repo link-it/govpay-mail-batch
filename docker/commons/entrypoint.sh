@@ -8,10 +8,10 @@
 
 set -e
 
-# Debug di esecuzione (come govpay-docker)
-exec 6<> /tmp/entrypoint_debug.log
-exec 2>&6
-set -x
+# Niente tracing (set -x) e nessuna redirezione dello stderr su file: il
+# tracing scriverebbe la password del database in chiaro (export di
+# SPRING_DATASOURCE_PASSWORD) e lo stderr della JVM finirebbe in un file dentro
+# il container invece che nei log del container.
 
 # Funzioni di logging
 log_info() { echo -e "\033[0;32m[INFO]\033[0m $(date '+%Y-%m-%d %H:%M:%S') - $1"; }
@@ -117,8 +117,8 @@ GOVPAY_MAIL_MAX_POOL=${GOVPAY_MAIL_MAX_POOL:-10}
 
 if [ "${GOVPAY_MAIL_POP_DB_SKIP:-TRUE}" != "TRUE" ] && [ -n "${GOVPAY_DB_TYPE}" ]; then
     log_info "Esecuzione script di inizializzazione database..."
-    /usr/local/bin/init_mail_db.sh
-    if [ $? -ne 0 ]; then
+    # Con set -e un "if [ $? -ne 0 ]" dopo il comando non verrebbe mai eseguito
+    if ! /usr/local/bin/init_mail_db.sh; then
         log_error "Inizializzazione database fallita"
         exit 1
     fi
