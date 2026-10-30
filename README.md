@@ -34,10 +34,10 @@ Storico delle modifiche nel [ChangeLog](ChangeLog).
 
 | Componente | Quando serve | Obbligatorio | Ruolo |
 |------------|--------------|--------------|-------|
-| Database di GovPay | runtime | sì | Datasource dell'applicazione. Oggi nessuna tabella di GovPay viene letta o scritta. Con il porting: `promemoria` (lettura e aggiornamento dello stato), `versamenti`, `tipi_versamento`, `tipi_vers_domini`, `domini`, `rpt` e `configurazione` (`mail_batch`, `avvisatura_mail`) |
+| Database di GovPay | runtime | sì | Datasource dell'applicazione. Oggi legge solo la riga `log_level` della tabella `configurazione` (livelli di log) e, se `govpay.client.cache.enabled=true`, i connettori (`connettori`) all'avvio; non scrive nulla. Con il porting: `promemoria` (lettura e aggiornamento dello stato), `versamenti`, `tipi_versamento`, `tipi_vers_domini`, `domini`, `rpt` e `configurazione` (`mail_batch`, `avvisatura_mail`) |
 | Tabelle Spring Batch | runtime | no, oggi | Metadati delle esecuzioni (`batch_job_*`, `batch_step_*`), su cui punta il repository JDBC di `govpay-common`. Senza job non vengono usate e l'applicazione parte anche se mancano; serviranno con il primo job. Lo schema è nel pacchetto `sql.zip` (vedi [Compilazione](#compilazione)) e l'immagine Docker può crearlo all'avvio |
 | [govpay-bom](https://github.com/link-it/govpay-bom) | build | sì | Parent Maven: versioni delle dipendenze e dei plugin, profilo `dist` |
-| [govpay-common](https://github.com/link-it/govpay-common) | build | sì | Libreria comune: repository JDBC dei metadati Spring Batch e tracciatura di transaction id e correlation id. Con il porting: invio delle email (`AbstractMailService`, configurazione `mail_batch`), coordinamento dei job, API REST del batch |
+| [govpay-common](https://github.com/link-it/govpay-common) | build | sì | Libreria comune: repository JDBC dei metadati Spring Batch, tracciatura di transaction id e correlation id, livelli di log letti dalla tabella `configurazione`, connettori e client HTTP. Con il porting: invio delle email (`AbstractMailService`, configurazione `mail_batch`), coordinamento dei job, API REST del batch |
 | [govpay-common-pendenze](https://github.com/link-it/govpay-common-pendenze) | build | previsto | Modello delle pendenze e delle ricevute usato dal porting; oggi non è una dipendenza |
 | Server SMTP | runtime | previsto | Server di posta dell'Ente. Host, porta, credenziali, mittente, timeout, STARTTLS e SSL non sono proprietà del batch: sono nella configurazione `mail_batch` di GovPay (tabella `configurazione`), impostata dalla console |
 | [govpay-stampe-api](https://github.com/link-it/govpay-stampe-api) | runtime | previsto | PDF dell'avviso di pagamento e della ricevuta da allegare ai promemoria |
@@ -65,6 +65,12 @@ mvn clean install -Pjar,dist
 ```
 
 Il profilo `jar` va indicato insieme a `dist`: è quello che lascia i driver JDBC fuori dal jar.
+
+Per il deploy su un application server (Tomcat 11 o altro container Jakarta EE 11) si produce il war `target/govpay-mail-batch.war` con il profilo `war`:
+
+```bash
+mvn clean install -Pwar
+```
 
 ## Configurazione
 
@@ -116,10 +122,10 @@ I driver JDBC non sono inclusi nel jar: vedi [Esecuzione](#esecuzione).
 | `logging.file.name` | `LOGGING_FILE_NAME` | - (solo console) | File di log; nel container `/var/log/govpay-mail/govpay-mail.log` |
 | `logging.level.it.govpay` | `LOGGING_LEVEL_IT_GOVPAY` | `INFO` | Livello di log dei package GovPay |
 | `logging.pattern.level` | `LOGGING_PATTERN_LEVEL` | `%5p [%X{transactionId:-},%X{correlationId:-}]` | Aggiunge a ogni riga transaction id e correlation id |
-| `govpay.logging.livelli-dinamici.enabled` | `GOVPAY_LOGGING_LIVELLIDINAMICI_ENABLED` | `true` | Livelli di log letti dalla riga `log_level` della tabella `configurazione`. **Oggi senza effetto**: il servizio di configurazione di `govpay-common` non viene caricato, quindi i livelli si cambiano solo con le proprietà `logging.level.*` |
-| `govpay.logging.livelli-dinamici.intervallo-refresh` | `LOG_LEVEL_REFRESH_INTERVAL` | `60s` | Intervallo di rilettura dei livelli dal database; `0` li legge solo all'avvio. Oggi senza effetto |
-| `govpay.logging.livelli-dinamici.ritardo-iniziale` | `GOVPAY_LOGGING_LIVELLIDINAMICI_RITARDOINIZIALE` | `60s` | Ritardo della prima rilettura dopo quella di avvio. Oggi senza effetto |
-| `govpay.logging.livelli-dinamici.logger-gestiti[0]` | `GOVPAY_LOGGING_LIVELLIDINAMICI_LOGGERGESTITI_0` | `it.govpay` | Prefissi dei logger modificabili da database. Oggi senza effetto |
+| `govpay.logging.livelli-dinamici.enabled` | `GOVPAY_LOGGING_LIVELLIDINAMICI_ENABLED` | `true` | Livelli di log letti dalla riga `log_level` della tabella `configurazione`, modificabili dalla console senza riavvio |
+| `govpay.logging.livelli-dinamici.intervallo-refresh` | `LOG_LEVEL_REFRESH_INTERVAL` | `60s` | Intervallo di rilettura dei livelli dal database; `0` li legge solo all'avvio |
+| `govpay.logging.livelli-dinamici.ritardo-iniziale` | `GOVPAY_LOGGING_LIVELLIDINAMICI_RITARDOINIZIALE` | `60s` | Ritardo della prima rilettura dopo quella di avvio |
+| `govpay.logging.livelli-dinamici.logger-gestiti[0]` | `GOVPAY_LOGGING_LIVELLIDINAMICI_LOGGERGESTITI_0` | `it.govpay` | Prefissi dei logger modificabili da database |
 | `govpay.logging.tracciatura.enabled` | `GOVPAY_LOGGING_TRACCIATURA_ENABLED` | `true` | Filtro HTTP di `govpay-common` che assegna transaction id e correlation id a ogni richiesta e li restituisce negli header di risposta |
 | `govpay.logging.tracciatura.correlation-inbound-headers` | `GOVPAY_LOGGING_TRACCIATURA_CORRELATIONINBOUNDHEADERS` | `X-Correlation-ID,X-Request-ID` | Header letti per il correlation id, in ordine di precedenza |
 | `govpay.logging.tracciatura.correlation-response-headers` | `GOVPAY_LOGGING_TRACCIATURA_CORRELATIONRESPONSEHEADERS` | `X-Correlation-ID,X-Request-ID` | Header di risposta con il correlation id |
@@ -128,6 +134,18 @@ I driver JDBC non sono inclusi nel jar: vedi [Esecuzione](#esecuzione).
 | `govpay.logging.tracciatura.lunghezza-massima-id` | `GOVPAY_LOGGING_TRACCIATURA_LUNGHEZZAMASSIMAID` | `128` | Lunghezza massima di un identificativo ricevuto; oltre viene sostituito da uno generato |
 | `govpay.logging.tracciatura.pattern-id-valido` | `GOVPAY_LOGGING_TRACCIATURA_PATTERNIDVALIDO` | `[A-Za-z0-9._:\-]+` | Espressione regolare che un identificativo ricevuto deve soddisfare per essere riusato |
 | `govpay.logging.tracciatura.ordine` | `GOVPAY_LOGGING_TRACCIATURA_ORDINE` | `-2147483548` (`Integer.MIN_VALUE + 100`) | Ordine del filtro nella catena servlet |
+
+### Connettori e client HTTP
+
+Proprietà dei client HTTP di `govpay-common`, caricati all'avvio; URL e autenticazione dei servizi chiamati non sono proprietà del batch ma connettori di GovPay (tabella `connettori`). Oggi il batch non chiama nessun servizio.
+
+| Proprietà | Variabile d'ambiente | Default | Descrizione |
+|-----------|----------------------|---------|-------------|
+| `govpay.client.cache.enabled` | `GOVPAY_CLIENT_CACHE_ENABLED` | `false` | Carica i connettori all'avvio e li tiene in cache |
+| `govpay.client.async.core-pool-size` | `GOVPAY_CLIENT_ASYNC_COREPOOLSIZE` | `10` | Thread minimi per le chiamate asincrone |
+| `govpay.client.async.max-pool-size` | `GOVPAY_CLIENT_ASYNC_MAXPOOLSIZE` | `50` | Thread massimi per le chiamate asincrone |
+| `govpay.client.async.queue-capacity` | `GOVPAY_CLIENT_ASYNC_QUEUECAPACITY` | `100` | Chiamate in coda in attesa di un thread |
+| `govpay.client.async.thread-name-prefix` | `GOVPAY_CLIENT_ASYNC_THREADNAMEPREFIX` | `async-http-` | Prefisso dei thread delle chiamate asincrone |
 
 ### Monitoraggio
 
@@ -186,6 +204,10 @@ java -Dloader.path=./jdbc-drivers \
      -jar target/govpay-mail-batch.jar --spring.profiles.active=cron --spring.main.web-application-type=none
 ```
 
+### War su application server
+
+Il war del profilo `war` usa il datasource dell'application server: va dichiarato come risorsa JNDI (es. `jdbc/govpay` nel `context.xml` di Tomcat, con il driver JDBC in `lib/`) e indicato con `spring.datasource.jndi-name=java:comp/env/jdbc/govpay`, per esempio in `JAVA_OPTS` o come variabile `SPRING_DATASOURCE_JNDINAME`. Le altre proprietà si passano allo stesso modo. Gli endpoint rispondono sotto il context path del war (es. `/govpay-mail-batch/actuator/health`).
+
 ## Esecuzione con Docker
 
 L'immagine sarà pubblicata su Docker Hub come [linkitaly/govpay-mail-batch](https://hub.docker.com/r/linkitaly/govpay-mail-batch) (release) e `linkitaly/govpay-mail-batch-dev` (sviluppo, a ogni push su `main`); oggi non c'è ancora nessuna release. In locale si costruisce con `docker/build_image.sh` (vedi [docker/DOCKER.md](docker/DOCKER.md)). Con lo scheduler interno il servizio risponde sulla porta `10001`; i driver JDBC si montano in `/opt/jdbc-drivers`.
@@ -217,12 +239,12 @@ Variabili d'ambiente dell'immagine, oltre alle proprietà Spring Boot in forma d
 | `GOVPAY_MAIL_MIN_POOL` | no | `2` | Connessioni minime inattive del pool |
 | `GOVPAY_MAIL_MAX_POOL` | no | `10` | Connessioni massime del pool |
 | `GOVPAY_MAIL_BATCH_USA_CRON` | no | - | `true`, `si`, `yes` o `1`: esecuzione singola con il profilo `cron`, senza server HTTP; il container termina a fine esecuzione e va pianificato dall'esterno (es. CronJob Kubernetes). Altrimenti scheduler interno |
-| `GOVPAY_MAIL_BATCH_INTERVALLO_CRON` | no | `120` | Minuti tra un'esecuzione e l'altra con lo scheduler interno: l'entrypoint la converte in `SCHEDULER_MAILJOB_FIXEDDELAYSTRING`, sovrascrivendo un valore passato direttamente. Oggi senza effetto, perché il job non c'è |
+| `GOVPAY_MAIL_BATCH_INTERVALLO_CRON` | no | `120` | Minuti tra un'esecuzione e l'altra con lo scheduler interno: l'entrypoint la converte in `SCHEDULER_MAILJOB_FIXEDDELAYSTRING`. Se `SCHEDULER_MAILJOB_FIXEDDELAYSTRING` (in ms) è impostata direttamente vale quella, con un avviso nel log; un valore non numerico o zero blocca l'avvio. Sarà usata dal job: oggi l'intervallo non è letto da nessuno |
 | `SERVER_PORT` | no | `10001` | Porta HTTP con lo scheduler interno |
 | `MANAGEMENT_SERVER_PORT` | no | porta del servizio | Porta dedicata agli endpoint actuator |
 | `MANAGEMENT_ENDPOINTS` | no | `health,info,metrics,prometheus` | Endpoint actuator esposti |
-| `LOG_LEVEL_REFRESH_INTERVAL` | no | `60s` | Intervallo di rilettura dei livelli di log dal database (oggi senza effetto, vedi [Logging](#logging)) |
-| `GOVPAY_MAIL_GDE_URL` | no | - | **Senza effetto**: l'entrypoint ne ricava `GOVPAY_GDE_ENABLED` e `GOVPAY_GDE_BASE_URL`, che il batch non legge. Negli altri batch l'invio al GDE si configura con il connettore `govpay_gde_api` di GovPay |
+| `LOG_LEVEL_REFRESH_INTERVAL` | no | `60s` | Intervallo di rilettura dei livelli di log dal database |
+| `GOVPAY_MAIL_GDE_URL` | no | - | **Senza effetto**: il batch non invia eventi al GDE e, negli altri batch, l'invio si configura con il connettore `govpay_gde_api` di GovPay. Se è impostata, l'entrypoint lo segnala con un avviso nel log |
 | `GOVPAY_MAIL_POP_DB_SKIP` | no | `TRUE` | `FALSE` crea all'avvio le tabelle Spring Batch, se la tabella `GOVPAY_MAIL_DB_CHECK_TABLE` non esiste |
 | `GOVPAY_MAIL_DB_CHECK_TABLE` | no | `batch_job_execution_context` | Tabella che indica che lo schema Spring Batch è già presente |
 | `GOVPAY_MAIL_LIVE_DB_CHECK_SKIP` | no | `FALSE` | Salta l'attesa della porta del database prima dell'inizializzazione |
@@ -239,7 +261,7 @@ Variabili d'ambiente dell'immagine, oltre alle proprietà Spring Boot in forma d
 | `GOVPAY_MAIL_JVM_MAX_DIRECT_MEMORY_SIZE` | no | - | `-XX:MaxDirectMemorySize` della JVM |
 | `JAVA_OPTS` | no | - | Opzioni aggiuntive della JVM |
 
-L'identificativo del nodo (`govpay.batch.cluster-id`) è impostato dall'entrypoint, con la variabile `GOVPAY_BATCH_CLUSTER_ID`, all'indirizzo IP del container o al suo hostname se l'IP non si ricava: un valore passato dall'esterno viene sovrascritto. Le altre variabili che compaiono negli script dell'immagine (es. `INTERVALLO_MINUTI`, `HSQLDB_SHA256`) sono interne e non vanno impostate. Il Dockerfile imposta anche `GOVPAY_BATCH_THREAD_POOL_SIZE`, `GOVPAY_BATCH_HEADERS_CHUNK_SIZE`, `GOVPAY_BATCH_METADATA_CHUNK_SIZE`, `GOVPAY_BATCH_PAYMENTS_CHUNK_SIZE`, `GOVPAY_BATCH_SKIP_LIMIT`, `LOGGING_DIRECTORYPATH` e `LOGGING_FILEPREFIX`, che il batch non legge. Il log di avvio dell'entrypoint è in `/tmp/entrypoint_debug.log` dentro il container.
+L'identificativo del nodo (`govpay.batch.cluster-id`) è impostato dall'entrypoint, con la variabile `GOVPAY_BATCH_CLUSTER_ID`, all'indirizzo IP del container o al suo hostname se l'IP non si ricava: un valore passato dall'esterno viene sovrascritto. Le altre variabili che compaiono negli script dell'immagine (es. `INTERVALLO_MINUTI`, `HSQLDB_SHA256`) sono interne e non vanno impostate. I messaggi dell'entrypoint e della JVM vanno nel log del container (`docker logs`); l'applicazione scrive anche in `/var/log/govpay-mail/govpay-mail.log`.
 
 Costruzione dell'immagine in locale, scansione delle vulnerabilità e pacchetti inclusi sono descritti in [docker/DOCKER.md](docker/DOCKER.md) e [docker/SCANSIONE.md](docker/SCANSIONE.md).
 
@@ -252,7 +274,7 @@ curl http://localhost:10001/actuator/health       # stato, compresa la connessio
 curl http://localhost:10001/actuator/prometheus   # metriche in formato Prometheus
 ```
 
-Per spostarli su una porta dedicata impostare `management.server.port` (nel container `MANAGEMENT_SERVER_PORT`). L'endpoint `loggers`, che permette di cambiare i livelli di log a caldo, non è esposto di default perché il servizio non ha autenticazione: abilitarlo solo insieme a una porta dedicata e non raggiungibile dall'esterno, per esempio `MANAGEMENT_SERVER_PORT=9090` e `MANAGEMENT_ENDPOINTS=health,info,metrics,prometheus,loggers`.
+Per spostarli su una porta dedicata impostare `management.server.port` (nel container `MANAGEMENT_SERVER_PORT`). L'endpoint `loggers`, che permette di cambiare i livelli di log a caldo, non è esposto di default perché il servizio non ha autenticazione: abilitarlo solo insieme a una porta dedicata e non raggiungibile dall'esterno, per esempio `MANAGEMENT_SERVER_PORT=9090` e `MANAGEMENT_ENDPOINTS=health,info,metrics,prometheus,loggers`. In alternativa i livelli si cambiano dalla console, tramite la tabella `configurazione`.
 
 Il batch non espone ancora l'API REST comune ai batch GovPay (`/api/batch`, avvio manuale e consultazione delle esecuzioni): arriverà con il job. Con il profilo `cron` non c'è server HTTP: l'esito si ricava dall'exit code del processo e dai log.
 
