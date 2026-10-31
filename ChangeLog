@@ -1,3 +1,17 @@
+2026-10-30  Giuliano Pintori <pintori@link.it>
+
+	* [Documentazione] README allineato al modello comune dei progetti GovPay,
+	DOCKER.md e DOCKERHUB.md allineati all'immagine.
+	* [Container] L'entrypoint non scrive piu' la password del database in
+	/tmp/entrypoint_debug.log; intervallo dello scheduler validato, con
+	precedenza a SCHEDULER_MAILJOB_FIXEDDELAYSTRING; GOVPAY_MAIL_GDE_URL
+	segnalata come senza effetto. init_mail_db.sh: nuovi tentativi sul
+	database, schema creato anche senza readiness check, readiness Oracle
+	corretto, file rc di SqlTool cancellato. Dockerfile senza variabili
+	inutilizzate.
+	* [Build] Il profilo war produce un war deployabile.
+	* [Logging] Livelli di log letti dalla tabella configurazione attivi.
+
 2026-10-23  Giuliano Pintori <pintori@link.it>
 
 	* [Pipeline] Pipeline di validazione e rilascio (#1).

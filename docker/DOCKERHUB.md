@@ -11,16 +11,16 @@ Batch Spring Boot per la **spedizione delle email** di GovPay.
 
 ## Cos'è GovPay MAIL Batch
 
-GovPay MAIL Batch è un componente del progetto [GovPay](https://github.com/link-it/govpay) che si occupa della spedizione delle email generate da GovPay.
+GovPay MAIL Batch è un componente del progetto [GovPay](https://github.com/link-it/govpay) destinato alla spedizione via email dei promemoria di GovPay (avvisi di pagamento, scadenze e ricevute).
 
-### Funzionalità principali
+> Il batch è in fase di sviluppo: la versione attuale non contiene ancora il job di spedizione. Stato e funzionalità previste sono descritti nel [README](https://github.com/link-it/govpay-mail-batch/blob/main/README.md).
 
-- Spedizione delle email di GovPay
+### Caratteristiche dell'immagine
+
 - Supporto multi-database: PostgreSQL, MySQL/MariaDB, Oracle
-- Modalità di deployment flessibili (daemon o esecuzione singola)
-- Integrazione opzionale con GDE (Giornale degli Eventi)
+- Modalità di esecuzione con scheduler interno o esecuzione singola
+- Creazione all'avvio dello schema dei metadati Spring Batch
 - Health check e monitoraggio tramite Spring Boot Actuator
-- Gestione automatica del recovery per job bloccati
 
 ## Versioni disponibili
 
