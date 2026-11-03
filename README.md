@@ -86,7 +86,7 @@ Il server SMTP non si configura con proprietà del batch: vedi [Integrazione con
 | `scheduler.initialDelayString` | `SCHEDULER_INITIALDELAYSTRING` | `1` | Ritardo della prima esecuzione dopo l'avvio, in ms. Predisposta per il job: oggi non è letta |
 | `govpay.batch.cluster-id` | `GOVPAY_BATCH_CLUSTERID` | `GovPay-Mail-Batch` | Identificativo del nodo, da registrare nelle esecuzioni; nel container è l'indirizzo IP. Oggi non è letta |
 | `govpay.batch.stale-threshold-minutes` | `GOVPAY_BATCH_STALETHRESHOLDMINUTES` | `120` | Minuti senza aggiornamenti dopo cui un'esecuzione in corso sarà considerata bloccata. Oggi non è letta |
-| `govpay.batch.enabled` | `GOVPAY_BATCH_ENABLED` | `true` | Oggi non è letta |
+| `govpay.batch.enabled` | `GOVPAY_BATCH_ENABLED` | `true` | Con `false` lo scheduler interno non avvia il job (all'avvio il log lo segnala); `/run` e il profilo `cron` restano disponibili. Nel profilo `cron` non ha effetto |
 | `govpay.batch.job-repository.jdbc.enabled` | `GOVPAY_BATCH_JOBREPOSITORY_JDBC_ENABLED` | `true` | Metadati Spring Batch su database (da `govpay-common`); senza, il coordinamento tra nodi non funziona |
 | `spring.batch.job.enabled` | `SPRING_BATCH_JOB_ENABLED` | `false` | Avvio automatico dei job da parte di Spring Boot: resta `false`, i job saranno avviati dallo scheduler o dal profilo `cron` |
 | `spring.profiles.active` | `SPRING_PROFILES_ACTIVE` | `default` | `cron` per l'esecuzione singola (vedi [Esecuzione](#esecuzione)) |
