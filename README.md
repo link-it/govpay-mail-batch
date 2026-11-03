@@ -84,7 +84,7 @@ Il server SMTP non si configura con proprietà del batch: vedi [Integrazione con
 |-----------|----------------------|---------|-------------|
 | `scheduler.mailJob.fixedDelayString` | `SCHEDULER_MAILJOB_FIXEDDELAYSTRING` | `7200000` | Intervallo tra un'esecuzione e la successiva, in ms (2 ore). Predisposta per il job: oggi non è letta |
 | `scheduler.initialDelayString` | `SCHEDULER_INITIALDELAYSTRING` | `1` | Ritardo della prima esecuzione dopo l'avvio, in ms. Predisposta per il job: oggi non è letta |
-| `govpay.batch.cluster-id` | `GOVPAY_BATCH_CLUSTERID` | `GovPay-Mail-Batch` | Identificativo del nodo, da registrare nelle esecuzioni; nel container è l'indirizzo IP. Oggi non è letta |
+| `govpay.batch.cluster-id` | `GOVPAY_BATCH_CLUSTERID` | nome dell'host (nel container l'indirizzo IP) | Identificativo del nodo, deve essere diverso su ogni nodo (vedi [Più nodi](#più-nodi)). Oggi il batch non lo legge: lo usa solo `govpay-common` per il tag `nodo` delle metriche |
 | `govpay.batch.stale-threshold-minutes` | `GOVPAY_BATCH_STALETHRESHOLDMINUTES` | `120` | Minuti senza aggiornamenti dopo cui un'esecuzione in corso sarà considerata bloccata. Oggi non è letta |
 | `govpay.batch.enabled` | `GOVPAY_BATCH_ENABLED` | `true` | Con `false` lo scheduler interno non avvia il job (all'avvio il log lo segnala); `/run` e il profilo `cron` restano disponibili. Nel profilo `cron` non ha effetto |
 | `govpay.batch.job-repository.jdbc.enabled` | `GOVPAY_BATCH_JOBREPOSITORY_JDBC_ENABLED` | `true` | Metadati Spring Batch su database (da `govpay-common`); senza, il coordinamento tra nodi non funziona |
@@ -158,6 +158,8 @@ Proprietà dei client HTTP di `govpay-common`, caricati all'avvio; URL e autenti
 | `management.health.db.enabled` | `MANAGEMENT_HEALTH_DB_ENABLED` | `true` | Include la connessione al database nell'health |
 | `management.metrics.tags.application` | `MANAGEMENT_METRICS_TAGS_APPLICATION` | `govpay-mail-batch` | Tag che identifica il servizio nelle metriche |
 | `govpay.metrics.enabled` | `GOVPAY_METRICS_ENABLED` | `false` | Metriche di `govpay-common` sui tempi delle richieste HTTP e delle chiamate verso altri servizi |
+| `govpay.metrics.batch.enabled` | `GOVPAY_METRICS_BATCH_ENABLED` | `true` | Metriche dei batch di `govpay-common`; oggi, senza job, aggiungono solo il tag `nodo` (vedi [Monitoraggio](#monitoraggio-1)) |
+| `govpay.metrics.batch.tag-nodo` | `GOVPAY_METRICS_BATCH_TAGNODO` | `true` | Tag `nodo` con il cluster-id su tutte le metriche |
 
 ## Esecuzione
 
@@ -204,9 +206,21 @@ java -Dloader.path=./jdbc-drivers \
      -jar target/govpay-mail-batch.jar --spring.profiles.active=cron --spring.main.web-application-type=none
 ```
 
+### Più nodi
+
+Ogni nodo deve avere un `govpay.batch.cluster-id` diverso. Oggi il valore compare solo nel tag `nodo` delle metriche, che distingue i nodi in Prometheus; quando arriverà il job servirà anche ad attribuire le esecuzioni al nodo che le ha avviate.
+
+Se la proprietà non è impostata, il valore è il nome dell'host: la variabile d'ambiente `HOSTNAME` se è passata alla JVM, altrimenti il nome restituito dal sistema operativo, e solo se nessuno dei due è disponibile `GovPay-Batch`, uguale su tutti i nodi. Sulle VM con un nome host distinto non serve configurare nulla; altrimenti va impostato un valore per nodo, con la variabile `GOVPAY_BATCH_CLUSTER_ID` o con la proprietà:
+
+```bash
+java ... -Dgovpay.batch.cluster-id=mail-batch-nodo1 -jar target/govpay-mail-batch.jar
+```
+
+Nel container il valore è impostato dall'entrypoint (vedi [Esecuzione con Docker](#esecuzione-con-docker)).
+
 ### War su application server
 
-Il war del profilo `war` usa il datasource dell'application server: va dichiarato come risorsa JNDI (es. `jdbc/govpay` nel `context.xml` di Tomcat, con il driver JDBC in `lib/`) e indicato con `spring.datasource.jndi-name=java:comp/env/jdbc/govpay`, per esempio in `JAVA_OPTS` o come variabile `SPRING_DATASOURCE_JNDINAME`. Le altre proprietà si passano allo stesso modo. Gli endpoint rispondono sotto il context path del war (es. `/govpay-mail-batch/actuator/health`).
+Il war del profilo `war` usa il datasource dell'application server: va dichiarato come risorsa JNDI (es. `jdbc/govpay` nel `context.xml` di Tomcat, con il driver JDBC in `lib/`) e indicato con `spring.datasource.jndi-name=java:comp/env/jdbc/govpay`, per esempio in `JAVA_OPTS` o come variabile `SPRING_DATASOURCE_JNDINAME`. Le altre proprietà si passano allo stesso modo. Gli endpoint rispondono sotto il context path del war (es. `/govpay-mail-batch/actuator/health`). Il cluster-id predefinito è il nome dell'host, condiviso dagli altri batch installati sullo stesso server: va bene, perché le metriche si distinguono anche per il tag `application`, ma tra server diversi i nomi devono essere distinti (vedi [Più nodi](#più-nodi)).
 
 ## Esecuzione con Docker
 
@@ -275,6 +289,8 @@ curl http://localhost:10001/actuator/prometheus   # metriche in formato Promethe
 ```
 
 Per spostarli su una porta dedicata impostare `management.server.port` (nel container `MANAGEMENT_SERVER_PORT`). L'endpoint `loggers`, che permette di cambiare i livelli di log a caldo, non è esposto di default perché il servizio non ha autenticazione: abilitarlo solo insieme a una porta dedicata e non raggiungibile dall'esterno, per esempio `MANAGEMENT_SERVER_PORT=9090` e `MANAGEMENT_ENDPOINTS=health,info,metrics,prometheus,loggers`. In alternativa i livelli si cambiano dalla console, tramite la tabella `configurazione`.
+
+Tutte le metriche hanno il tag `nodo`, uguale al cluster-id del nodo (vedi [Più nodi](#più-nodi)), oltre ad `application="govpay-mail-batch"`. Nel container il cluster-id è l'indirizzo IP, quindi dopo un riavvio le serie hanno un `nodo` nuovo: le query che non riguardano un nodo specifico vanno aggregate (es. `sum without (nodo, instance)`). Le metriche di esecuzione dei job `govpay_batch_*` di `govpay-common` compariranno quando il batch avrà un job.
 
 Il batch non espone ancora l'API REST comune ai batch GovPay (`/api/batch`, avvio manuale e consultazione delle esecuzioni): arriverà con il job. Con il profilo `cron` non c'è server HTTP: l'esito si ricava dall'exit code del processo e dai log.
 
